@@ -1,49 +1,50 @@
 package rpc
 
-import "fmt"
-import "time"
+import (
+	"fmt"
 
-var (
-	luasha1 = ""
+	"github.com/teambition/snapper-core-go/util"
+
+	redis "gopkg.in/redis.v5"
 )
 
+type producer struct {
+	client  *redis.Client
+	luasha1 string
+}
+
 // Add a consumer to a specified room via rpc.
-func joinRoom(room, consumerID string) bool {
+func (p *producer) joinRoom(room, consumerID string) (bool, error) {
 	roomkey := genRoomKey(room)
-	client := getClient()
-	b, _ := client.HSet(roomkey, consumerID, "1").Result()
-	client.Expire(roomkey, time.Duration(defaultRommExp)*time.Second).Result()
-	return b
+	b, err := p.client.HSet(roomkey, consumerID, "1").Result()
+	p.client.Expire(roomkey, defaultRoomExp).Result()
+	return b, err
 }
 
 // Remove a consumer from a specified room via rpc.
-func leaveRoom(room, consumerID string) {
-	client := getClient()
+func (p *producer) leaveRoom(room, consumerID string) (int64, error) {
 	roomkey := genRoomKey(room)
-	client.HDel(roomkey, consumerID)
+	return p.client.HDel(roomkey, consumerID).Result()
 }
 
 // For testing purposes.
-func clearRoom(room string) {
-	client := getClient()
+func (p *producer) clearRoom(room string) (int64, error) {
 	roomkey := genRoomKey(room)
-	client.Del(roomkey)
+	return p.client.Del(roomkey).Result()
 }
 
 // Broadcast messages to redis queue
-func broadcastMessage(room string, msg string) (err error) {
+func (p *producer) broadcastMessage(room string, msg string) (err error) {
 	roomkey := genRoomKey(room)
 	fmt.Print(roomkey)
-	client := getClient()
-	if luasha1 == "" {
-		luasha1, err = client.ScriptLoad(lua).Result()
+	if p.luasha1 == "" {
+		p.luasha1, err = p.client.ScriptLoad(lua).Result()
 	}
-	fmt.Print(luasha1)
-	result, err := client.EvalSha(luasha1, []string{roomkey}).Result()
+	result, err := p.client.EvalSha(p.luasha1, []string{roomkey}).Result()
 	if err != nil {
-		luasha1, err = client.ScriptLoad(lua).Result()
+		p.luasha1, err = p.client.ScriptLoad(lua).Result()
 		if err == nil {
-			result, err = client.EvalSha(luasha1, []string{roomkey}).Result()
+			result, err = p.client.EvalSha(p.luasha1, []string{roomkey}).Result()
 		} else {
 			return
 		}
@@ -51,37 +52,46 @@ func broadcastMessage(room string, msg string) (err error) {
 	array := result.([]interface{})
 	if len(array) < 1 {
 		fmt.Print("not found consumerID")
-		return
+		return nil
 	}
 	consumers := ""
 	for _, args := range array {
 		consumerID := args.(string)
 		consumers = consumers + "," + consumerID
 		queueKey := genQueueKey(consumerID)
-		res, err := client.RPushX(queueKey, msg).Result()
+		res, err := p.client.RPushX(queueKey, msg).Result()
 		if err != nil || res < 1 {
 			break
 		}
 		// Weaken non-exists consumer, it will be removed in next cycle unless it being added again.
-		client.HIncrBy(roomkey, consumerID, -1)
+		p.client.HIncrBy(roomkey, consumerID, -1)
 		// if queue's length is too large, means that consumer was offline long time,
 		// or some exception messages produced. Anyway, it is no need to cache
 		if res > maxMessageQueueLen {
-			client.LTrim(queueKey, 0, maxMessageQueueLen)
+			p.client.LTrim(queueKey, 0, maxMessageQueueLen)
 		}
 	}
 	if len(consumers) > 0 {
-		client.Publish(PREFIX+":message", consumers[1:])
+		p.client.Publish(genChannelName(), consumers[1:])
 	}
 	return
 }
 
-func getUserConsumers(userID string) {
-	// client := getClient()
-	// consumerIds, err := client.SMembers(genUserStateKey(userID)).Result()
-	// for index, val := range consumerIds {
-
-	// }
+func (p *producer) getUserConsumers(userID string) (ps map[string]int, err error) {
+	ps = make(map[string]int)
+	consumerIds, err := p.client.SMembers(genUserStateKey(userID)).Result()
+	if err != nil {
+		return
+	}
+	ps["length"] = len(consumerIds)
+	ps["android"] = 0
+	ps["ios"] = 0
+	ps["web"] = 0
+	for _, val := range consumerIds {
+		t := util.IDToSource(val)
+		ps[t]++
+	}
+	return
 }
 
 //-- Checkout room' consumers

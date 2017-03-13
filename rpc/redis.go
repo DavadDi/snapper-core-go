@@ -1,32 +1,38 @@
 package rpc
 
-import redis "gopkg.in/redis.v5"
+import (
+	"time"
+
+	"github.com/teambition/snapper-core-go/util"
+	redis "gopkg.in/redis.v5"
+)
 
 var (
-	// PREFIX ...
-	PREFIX                   = "SNP"
-	redisaddr                = "192.168.0.21:6379"
 	maxMessageQueueLen int64 = 1024
-	defaultRommExp           = 3600 * 24 * 1.5
+	defaultRoomExp           = time.Duration(3600*24*1.5) * time.Second
 )
 
 func getClient() *redis.Client {
 	return redis.NewClient(&redis.Options{
-		Addr: redisaddr,
+		Addr: util.Conf.Redis.Hosts[0],
 	})
 }
 
 // Key for consumer's message queue. It is a List
 func genRoomKey(room string) string {
-	return PREFIX + ":H:" + room
+	return util.Conf.RedisPrefix + ":H:" + room
 }
 
 // Key for a room. It is a Hash
 func genQueueKey(consumerID string) string {
-	return PREFIX + ":L:" + consumerID
+	return util.Conf.RedisPrefix + ":L:" + consumerID
 }
 
 // Key for a user's state. It is a Set
 func genUserStateKey(userID string) string {
-	return PREFIX + ":U:" + userID
+	return util.Conf.RedisPrefix + ":U:" + userID
+}
+
+func genChannelName() string {
+	return util.Conf.RedisPrefix + ":message"
 }
