@@ -6,17 +6,14 @@ import (
 
 	"fmt"
 
-	"encoding/json"
-
-	"io/ioutil"
-
-	"time"
+	"log"
 
 	"github.com/SermoDigital/jose/crypto"
 	"github.com/SermoDigital/jose/jws"
 	"github.com/teambition/jsonrpc"
 	"github.com/teambition/respgo"
-	"github.com/teambition/snapper-core-go/util"
+	"github.com/teambition/snapper-core-go/src/service"
+	"github.com/teambition/snapper-core-go/src/util"
 	"github.com/teambition/socket-pool-go"
 )
 
@@ -30,14 +27,15 @@ type RPC struct {
 }
 
 // Start ...
-func (rpc *RPC) Start(path string) (err error) {
+func (rpc *RPC) Start(path string) {
 	if rpc.listener != nil {
-		return errors.New("RPC instance already exists")
+		log.Fatal("RPC instance already exists")
 	}
-	util.Conf = rpc.initConfig(path)
+	util.Conf = util.InitConfig(path)
+	var err error
 	rpc.listener, err = net.Listen("tcp", fmt.Sprint(":", util.Conf.RPCPort))
 	if err != nil {
-		fmt.Print(err.Error())
+		log.Fatal(err.Error())
 		return
 	}
 	for {
@@ -50,19 +48,6 @@ func (rpc *RPC) Start(path string) (err error) {
 		go client.handleConn()
 	}
 	return
-}
-func (rpc *RPC) initConfig(path string) *util.Config {
-	b, err := ioutil.ReadFile(path)
-	if err != nil {
-		panic(err.Error())
-	}
-	var config util.Config
-	err = json.Unmarshal(b, &config)
-	if err != nil {
-		panic(err.Error())
-	}
-	config.ReadWriteTimeout = config.ReadWriteTimeout * time.Second
-	return &config
 }
 
 // Close ...
@@ -79,7 +64,7 @@ func (rpc *RPC) Close() (err error) {
 func NewConnection(conn net.Conn) *Connection {
 	connection := new(Connection)
 	connection.Socket = &socketpool.Socket{Conn: conn}
-	connection.p = &producer{client: getClient()}
+	connection.p = &producer{client: service.GetClient()}
 	return connection
 }
 
