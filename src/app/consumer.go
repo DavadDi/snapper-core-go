@@ -6,40 +6,10 @@ import (
 
 	"time"
 
-	"sync"
-
 	"github.com/teambition/snapper-core-go/src/service"
 	"github.com/teambition/snapper-core-go/src/util"
 	redis "gopkg.in/redis.v5"
 )
-
-// NewConsumers ....
-func NewConsumers() *Consumers {
-	return &Consumers{clients: make(map[string]*ClientHandler)}
-}
-
-// Consumers ...
-type Consumers struct {
-	lock    sync.Mutex
-	clients map[string]*ClientHandler
-}
-
-// Add ...
-func (c *Consumers) Add(key string, client *ClientHandler) {
-	c.lock.Lock()
-	c.clients[key] = client
-	c.lock.Unlock()
-}
-
-// Get ...
-func (c *Consumers) Get(key string) *ClientHandler {
-	return c.clients[key]
-}
-
-// Del ...
-func (c *Consumers) Del(key string) {
-	delete(c.clients, key)
-}
 
 // NewConsumer ...
 func NewConsumer() *Consumer {
@@ -67,7 +37,7 @@ func (c *Consumer) addConsumer(consumerID string) {
 	queueKey := service.GenQueueKey(consumerID)
 	str, _ := c.client.LIndex(queueKey, 0).Result()
 	if str == "" {
-		// Initialize message queue if key does not exist,
+		// Initialize message queue if it does not exist,
 		c.client.RPush(queueKey, "1")
 	}
 	c.client.Expire(queueKey, util.Conf.RedisQueueExpires)
@@ -108,8 +78,7 @@ func (c *Consumer) pullMessage(consumerID string) {
 	if len(msgs) < 1 {
 		return
 	}
-	client := consumers.Get(consumerID)
-
+	client := clientManager.Get(consumerID)
 	client.sendMessage(msgs)
 	c.client.LTrim(queueKey, 1, service.DefaultMessagesToPull)
 }
@@ -150,4 +119,12 @@ func (c *Consumer) removeUserConsumer(userID, consumerID string) {
 func (c *Consumer) weakenConsumer(consumerID string) {
 	queueKey := service.GenQueueKey(consumerID)
 	c.client.Expire(queueKey, service.DefaultMessageQueueExp).Result()
+}
+
+// Add a consumer to a specified room via rpc.
+func (c *Consumer) joinRoom(room, consumerID string) (bool, error) {
+	roomkey := service.GenRoomKey(room)
+	b, err := c.client.HSet(roomkey, consumerID, "1").Result()
+	c.client.Expire(roomkey, service.DefaultRoomExp).Result()
+	return b, err
 }

@@ -1,7 +1,7 @@
 package rpc
 
 import (
-	"fmt"
+	"log"
 
 	"github.com/teambition/snapper-core-go/src/service"
 	"github.com/teambition/snapper-core-go/src/util"
@@ -37,7 +37,7 @@ func (p *producer) clearRoom(room string) (int64, error) {
 // Broadcast messages to redis queue
 func (p *producer) broadcastMessage(room string, msg string) (err error) {
 	roomkey := service.GenRoomKey(room)
-	fmt.Print(roomkey)
+	log.Println(roomkey)
 	if p.luasha1 == "" {
 		p.luasha1, err = p.client.ScriptLoad(lua).Result()
 	}
@@ -52,7 +52,7 @@ func (p *producer) broadcastMessage(room string, msg string) (err error) {
 	}
 	array := result.([]interface{})
 	if len(array) < 1 {
-		fmt.Print("not found consumerID")
+		log.Println("not found consumerID")
 		return nil
 	}
 	consumers := ""
@@ -61,11 +61,11 @@ func (p *producer) broadcastMessage(room string, msg string) (err error) {
 		consumers = consumers + "," + consumerID
 		queueKey := service.GenQueueKey(consumerID)
 		res, err := p.client.RPushX(queueKey, msg).Result()
-		if err != nil || res < 1 {
+		if err != nil || res < 1 { // the consumerID does not have the queue.
+			// Weaken non-exists consumer, it will be removed in next cycle unless it being added again.
+			p.client.HIncrBy(roomkey, consumerID, -1)
 			break
 		}
-		// Weaken non-exists consumer, it will be removed in next cycle unless it being added again.
-		p.client.HIncrBy(roomkey, consumerID, -1)
 		// if queue's length is too large, means that consumer was offline long time,
 		// or some exception messages produced. Anyway, it is no need to cache
 		if res > service.MaxMessageQueueLen {
