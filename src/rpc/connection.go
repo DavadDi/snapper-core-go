@@ -35,18 +35,14 @@ func (conn *Connection) handleConn() {
 		conn.Close()
 	}()
 	for {
-		var resp []byte
-		resp, err = conn.ReadAll(util.Conf.ReadWriteTimeout)
-		if err != nil {
-			break
-		}
-		var rpc string
-		rpc, err = respgo.DecodeToString(resp)
-		if err != nil {
+		var resp interface{}
+		_, resp, err = respgo.Parse(conn.Conn, util.Conf.ReadWriteTimeout)
+		msg, ok := resp.(string)
+		if err != nil || !ok {
 			break
 		}
 		var req *jsonrpc.ClientRequest
-		req, err = jsonrpc.Parse(string(rpc))
+		req, err = jsonrpc.Parse(msg)
 		if err != nil || req.Type == jsonrpc.Invalid || req.Type == jsonrpc.ErrorType {
 			break
 		}

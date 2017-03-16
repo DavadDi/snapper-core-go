@@ -61,7 +61,8 @@ func (c *Consumer) onMessage() {
 			}
 			consumerIds := strings.Split(msg.Payload, ",")
 			for _, id := range consumerIds {
-				c.pullMessage(id)
+				log.Print(id)
+				//	c.pullMessage(id)
 			}
 		}
 	}
