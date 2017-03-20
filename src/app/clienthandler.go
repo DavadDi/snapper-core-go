@@ -26,6 +26,7 @@ type ClientHandler struct {
 	userid     string
 	consumerID string
 	source     string
+	ioPending  bool
 }
 
 func (client *ClientHandler) init() (err error) {

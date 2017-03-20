@@ -26,10 +26,21 @@ func (c *ClientManager) Get(key string) *ClientHandler {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	ret, ok := c.clients[key]
-	if !ok {
+	if !ok || ret.ioPending {
 		return nil
 	}
+	ret.ioPending = true
 	return ret
+}
+
+// ReleaseIO ...
+func (c *ClientManager) ReleaseIO(key string) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+	ret, ok := c.clients[key]
+	if ok {
+		ret.ioPending = false
+	}
 }
 
 // Del ...

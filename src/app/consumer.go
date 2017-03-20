@@ -61,27 +61,41 @@ func (c *Consumer) onMessage() {
 			}
 			consumerIds := strings.Split(msg.Payload, ",")
 			for _, id := range consumerIds {
-				log.Print(id)
-				//	c.pullMessage(id)
+				c.pullMessage(id)
 			}
 		}
 	}
 }
 func (c *Consumer) pullMessage(consumerID string) {
-	queueKey := service.GenQueueKey(consumerID)
-	// Pull at most 20 messages at a time.
-	// A placeholder message is at index 0 (`'1'` or last unread message).
-	// Because empty list will be removed automatically.
-	msgs, err := c.client.LRange(queueKey, 1, service.DefaultMessagesToPull).Result()
-	if err != nil {
-		log.Print(err.Error())
-	}
-	if len(msgs) < 1 {
+	client := clientManager.Get(consumerID)
+	if client == nil {
+		log.Print("no suitable consumer")
 		return
 	}
-	client := clientManager.Get(consumerID)
-	client.sendMessage(msgs)
-	c.client.LTrim(queueKey, 1, service.DefaultMessagesToPull)
+	go func() {
+		defer func() {
+			r := recover()
+			if r != nil {
+				log.Println(r)
+			}
+			clientManager.ReleaseIO(consumerID)
+		}()
+		queueKey := service.GenQueueKey(consumerID)
+		// Pull at most 20 messages at a time.
+		// A placeholder message is at index 0 (`'1'` or last unread message).
+		// Because empty list will be removed automatically.
+		msgs, err := c.client.LRange(queueKey, 1, service.DefaultMessagesToPull).Result()
+		if err != nil {
+			log.Print(err.Error())
+		}
+		if len(msgs) < 1 {
+			return
+		}
+		client.sendMessage(msgs)
+		msglength := int64(len(msgs))
+		c.client.LTrim(queueKey, msglength, -1)
+		stats.IncrConsumerMessages(msglength)
+	}()
 }
 func (c *Consumer) addUserConsumer(userID, consumerID string) {
 	userkey := service.GenUserStateKey(userID)

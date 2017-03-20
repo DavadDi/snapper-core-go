@@ -35,10 +35,9 @@ func (conn *Connection) handleConn() {
 		conn.Close()
 	}()
 	for {
-		var resp interface{}
-		_, resp, err = respgo.Parse(conn.Conn, util.Conf.ReadWriteTimeout)
-		msg, ok := resp.(string)
-		if err != nil || !ok {
+		var msg string
+		msg, err = conn.ReadString(util.Conf.ReadWriteTimeout * 10)
+		if err != nil {
 			break
 		}
 		var req *jsonrpc.ClientRequest
@@ -63,7 +62,13 @@ func (conn *Connection) handleJSONRPC(req *jsonrpc.ClientRequest) (err error) {
 		}
 		var reply string
 		if r != nil {
-			reply, _ = jsonrpc.Error(req.PlayLoad.ID, jsonrpc.RPCInternalError)
+			var ok bool
+			err, ok = r.(error)
+			if !ok {
+				reply, _ = jsonrpc.Error(req.PlayLoad.ID, jsonrpc.RPCInternalError)
+			} else {
+				reply, _ = jsonrpc.Error(req.PlayLoad.ID, jsonrpc.CreateError(-32700, err.Error()))
+			}
 		} else {
 			if err != nil {
 				reply, _ = jsonrpc.Error(req.PlayLoad.ID, errObj)

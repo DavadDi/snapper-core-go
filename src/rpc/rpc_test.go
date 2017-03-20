@@ -16,7 +16,7 @@ var (
 	clientoptions = &snapper.Options{
 		SecretKeys: []string{"Usdsiwcs78Ymhpewlk"},
 		ExpiresIn:  604800,
-		Address:    "192.168.0.21:7720",
+		//Address:    "192.168.0.21:7720",
 		ProducerID: "teambition",
 	}
 	endsignal chan bool
