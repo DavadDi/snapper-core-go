@@ -13,5 +13,13 @@ func TestConfig(t *testing.T) {
 		config := InitConfig("../../config/default.json")
 		assert.Equal(7700, config.RPCPort)
 		assert.Equal(time.Duration(30)*time.Second, config.ReadWriteTimeout)
+
+		assert.Panics(func() {
+			config = InitConfig("../config/default.json")
+		})
+
+		assert.Panics(func() {
+			config = InitConfig("../../config/defaulterr.json")
+		})
 	})
 }

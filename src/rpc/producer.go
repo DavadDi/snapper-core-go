@@ -15,17 +15,22 @@ type producer struct {
 }
 
 // Add a consumer to a specified room via rpc.
-func (p *producer) joinRoom(room, consumerID string) (bool, error) {
+func (p *producer) joinRoom(room, consumerID string) (int, error) {
 	roomkey := service.GenRoomKey(room)
 	b, err := p.client.HSet(roomkey, consumerID, "1").Result()
 	p.client.Expire(roomkey, service.DefaultRoomExp).Result()
-	return b, err
+	isOk := 0
+	if b {
+		isOk = 1
+	}
+	return isOk, err
 }
 
 // Remove a consumer from a specified room via rpc.
-func (p *producer) leaveRoom(room, consumerID string) (int64, error) {
+func (p *producer) leaveRoom(room, consumerID string) (isOk int64, err error) {
 	roomkey := service.GenRoomKey(room)
-	return p.client.HDel(roomkey, consumerID).Result()
+	isOk, err = p.client.HDel(roomkey, consumerID).Result()
+	return
 }
 
 // For testing purposes.

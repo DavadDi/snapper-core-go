@@ -9,7 +9,7 @@ import (
 	"github.com/SermoDigital/jose/crypto"
 	"github.com/SermoDigital/jose/jws"
 	"github.com/googollee/go-engine.io"
-	"github.com/teambition/jsonrpc"
+	"github.com/teambition/jsonrpc-go"
 	"github.com/teambition/snapper-core-go/src/util"
 )
 
@@ -34,19 +34,19 @@ func (client *ClientHandler) init() (err error) {
 	token := client.conn.Request().Header.Get("token")
 	jwt, err := jws.ParseJWT([]byte(token))
 	err = jwt.Validate([]byte(util.Conf.TokenSecret[0]), crypto.SigningMethodHS256)
-	if err != nil {
+	if err == nil {
+		payload := jwt.Claims()
+		client.userid = payload.Get("userId").(string)
+		client.source = payload.Get("source").(string)
+		client.consumerID = client.conn.Id()
+		consumers.addConsumer(client.consumerID)
+		// Bind a consumer to a specified user's room.
+		// A user may have one or more consumer's threads.
+		consumers.joinRoom("user"+client.userid, client.consumerID)
+		consumers.addUserConsumer(client.userid, client.consumerID)
+	} else {
 		log.Println(err.Error())
-		return
 	}
-	payload := jwt.Claims()
-	client.userid = payload.Get("userId").(string)
-	client.source = payload.Get("source").(string)
-	client.consumerID = client.conn.Id()
-	consumers.addConsumer(client.consumerID)
-	// Bind a consumer to a specified user's room.
-	// A user may have one or more consumer's threads.
-	consumers.joinRoom("user"+client.userid, client.consumerID)
-	consumers.addUserConsumer(client.userid, client.consumerID)
 	return
 }
 
@@ -65,7 +65,7 @@ func (client *ClientHandler) sendMessage(datas []string) {
 	if err != nil {
 		return
 	}
-	res, _ := jsonrpc.Request2("publish", datas)
+	res, _ := jsonrpc.Request(jsonrpc.RandID(), "publish", datas)
 	data, _ := json.Marshal(res)
 	w.Write(data)
 	w.Close()

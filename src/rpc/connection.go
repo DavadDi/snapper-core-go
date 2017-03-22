@@ -1,28 +1,31 @@
 package rpc
 
 import (
+	"errors"
 	"net"
 
 	"github.com/SermoDigital/jose/crypto"
 	"github.com/SermoDigital/jose/jws"
-	"github.com/teambition/jsonrpc"
-	"github.com/teambition/respgo"
+	"github.com/teambition/jsonrpc-go"
 	"github.com/teambition/snapper-core-go/src/service"
 	"github.com/teambition/snapper-core-go/src/util"
-	"github.com/teambition/socket-pool-go"
+)
+
+var (
+	errorUnauthorized = errors.New("{\"name\":\"Unauthorized\"}")
 )
 
 // NewConnection ...
 func NewConnection(conn net.Conn) *Connection {
 	connection := new(Connection)
-	connection.Socket = &socketpool.Socket{Conn: conn}
+	connection.Socket = service.NewSocket(conn)
 	connection.p = &producer{client: service.GetClient()}
 	return connection
 }
 
 // Connection ...
 type Connection struct {
-	*socketpool.Socket
+	*service.Socket
 	p *producer
 }
 
@@ -42,19 +45,16 @@ func (conn *Connection) handleConn() {
 		}
 		var req *jsonrpc.ClientRequest
 		req, err = jsonrpc.Parse(msg)
-		if err != nil || req.Type == jsonrpc.Invalid || req.Type == jsonrpc.ErrorType {
+		if err != nil || req.Type == jsonrpc.ErrorType {
 			break
 		}
-		err = conn.handleJSONRPC(req)
-		if err != nil {
-			err = nil
-			break
-		}
+		conn.handleJSONRPC(req)
 	}
 }
-func (conn *Connection) handleJSONRPC(req *jsonrpc.ClientRequest) (err error) {
+func (conn *Connection) handleJSONRPC(req *jsonrpc.ClientRequest) {
 	var result interface{}
 	var errObj *jsonrpc.ErrorObj
+	var err error
 	defer func() {
 		r := recover()
 		if req.Type == jsonrpc.NotificationType {
@@ -64,20 +64,19 @@ func (conn *Connection) handleJSONRPC(req *jsonrpc.ClientRequest) (err error) {
 		if r != nil {
 			var ok bool
 			err, ok = r.(error)
-			if !ok {
+			if ok {
+				reply, _ = jsonrpc.Error(req.PlayLoad.ID, jsonrpc.CastError(err))
+			} else {
 				reply, _ = jsonrpc.Error(req.PlayLoad.ID, jsonrpc.RPCInternalError)
-			} else {
-				reply, _ = jsonrpc.Error(req.PlayLoad.ID, jsonrpc.CreateError(-32700, err.Error()))
 			}
+		} else if err != nil {
+			reply, _ = jsonrpc.Error(req.PlayLoad.ID, jsonrpc.CastError(err))
+		} else if errObj != nil {
+			reply, _ = jsonrpc.Error(req.PlayLoad.ID, errObj)
 		} else {
-			if err != nil {
-				reply, _ = jsonrpc.Error(req.PlayLoad.ID, errObj)
-			} else {
-				reply, _ = jsonrpc.Success(req.PlayLoad.ID, result)
-			}
+			reply, _ = jsonrpc.Success(req.PlayLoad.ID, result)
 		}
-		resp := respgo.EncodeString(reply)
-		conn.Write(resp, util.Conf.ReadWriteTimeout)
+		conn.WriteBulkString(reply, util.Conf.ReadWriteTimeout)
 	}()
 	if req.Type == jsonrpc.RequestType {
 		switch req.PlayLoad.Method {

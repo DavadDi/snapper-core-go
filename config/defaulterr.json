@@ -1,0 +1,13 @@
+{
+  "port": 7701,
+  "rpcPort": 7700,
+  "redisPrefix": "SNP",
+  "tokenSecret": ["Usdsiwcs78Ymhpewlk"],
+  "tokenExpires": 172800,
+  "redisQueueExpires": 86400,
+  "readWriteTimeout":30,
+  "redis": {
+    "hosts": ["192.168.0.21:6379"],
+    "options": null
+  
+}

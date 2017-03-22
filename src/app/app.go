@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 
 	"github.com/googollee/go-engine.io"
-	"github.com/teambition/jsonrpc"
 	"github.com/teambition/snapper-core-go/src/util"
 )
 
@@ -41,15 +40,6 @@ func Start(path string) {
 			if err == nil {
 				clientManager.Add(handler.consumerID, handler)
 			} else {
-				log.Println(err.Error())
-				w, err := conn.NextWriter(engineio.MessageText)
-				if err != nil {
-					return
-				}
-				res, _ := jsonrpc.Request2("publish", "datas")
-				data, _ := json.Marshal(res)
-				w.Write(data)
-				w.Close()
 				handler.Close()
 			}
 		}
